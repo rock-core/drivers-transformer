@@ -1,7 +1,14 @@
 rock_library(transformer
-    SOURCES Transformer.cpp
-	    NonAligningTransformer.cpp
-    HEADERS Transformer.hpp TransformationStatus.hpp
-	    NonAligningTransformer.hpp
-    DEPS_PKGCONFIG aggregator base-types)
-
+    SOURCES
+        Transformer.cpp
+        Transformation.cpp
+        NonAligningTransformer.cpp
+    HEADERS
+        Transformer.hpp
+        Transformation.hpp
+        TransformationElement.hpp
+        TransformationStatus.hpp
+        NonAligningTransformer.hpp
+    DEPS_PKGCONFIG
+        aggregator
+        base-types)
