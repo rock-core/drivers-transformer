@@ -132,23 +132,23 @@ namespace transformer
 
         for(std::vector<TransformationElement *>::const_iterator it = transformationChain.begin(); it != transformationChain.end(); it++)
         {
-        TransformationType tr;
-        if(!(*it)->getTransformation(atTime, interpolate, tr))
-        {
-                if (interpolate)
-                    failedInterpolationImpossible++;
-                else
-                    failedNoSample++;
+            TransformationType tr;
+            if(!(*it)->getTransformation(atTime, interpolate, tr))
+            {
+                    if (interpolate)
+                        failedInterpolationImpossible++;
+                    else
+                        failedNoSample++;
 
-            //no sample available, return
-            return false;
-        }
-        
-        //TODO, this might be a costly operation
-        T trans( tr );
-        
-        //apply transformation
-        result = result * trans;
+                //no sample available, return
+                return false;
+            }
+            
+            //TODO, this might be a costly operation
+            T trans( tr );
+            
+            //apply transformation
+            result = result * trans;
         }
         lastGeneratedValue = atTime;
         generatedTransformations++;

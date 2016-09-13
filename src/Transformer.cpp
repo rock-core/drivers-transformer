@@ -6,25 +6,26 @@
 #include <sstream>
 
 namespace transformer {
-    
 
-
-class TransformationNode {
+class TransformationNode
+{
     public:
-	TransformationNode() : parent(NULL) {};
-	TransformationNode(const std::string &frameName, TransformationNode *parent, TransformationElement *parentToCurNode) : frameName(frameName), parent(parent), parentToCurNode(parentToCurNode) {};
-	
-	std::string frameName;
-	TransformationNode *parent;
-	TransformationElement *parentToCurNode;
-	std::vector<TransformationNode *> childs;
-	~TransformationNode() {
-	    //delete all known childs
-	    for(std::vector<TransformationNode *>::iterator it = childs.begin(); it != childs.end(); it++) {
-		delete *it;
-	    }
-	    childs.clear();
-	}
+    TransformationNode() : parent(NULL) {};
+    TransformationNode(const std::string &frameName, TransformationNode *parent, TransformationElement *parentToCurNode) : frameName(frameName), parent(parent), parentToCurNode(parentToCurNode) {};
+    
+    std::string frameName;
+    TransformationNode *parent;
+    TransformationElement *parentToCurNode;
+    std::vector<TransformationNode *> childs;
+    ~TransformationNode()
+    {
+        //delete all known childs
+        for(std::vector<TransformationNode *>::iterator it = childs.begin(); it != childs.end(); it++)
+        {
+            delete *it;
+        }
+        childs.clear();
+    }
 };
 
 TransformationTree::~TransformationTree()
@@ -100,14 +101,14 @@ void TransformationTree::addMatchingTransforms(std::string from, TransformationN
 {
     for(std::vector< TransformationElement* >::const_iterator it = availableElements.begin(); it != availableElements.end(); it++)
     {
-	if((*it)->getSourceFrame() == from)
-	{
-	    //security check for not building A->B->A->B loops
-	    if(node->parent && node->parent->frameName == (*it)->getTargetFrame())
-		continue;
-	    
-	    node->childs.push_back(new TransformationNode((*it)->getTargetFrame(), node, *it));
-	}	
+        if((*it)->getSourceFrame() == from)
+        {
+            //security check for not building A->B->A->B loops
+            if(node->parent && node->parent->frameName == (*it)->getTargetFrame())
+                continue;
+            
+            node->childs.push_back(new TransformationNode((*it)->getTargetFrame(), node, *it));
+        }
     }
 }
 
@@ -115,8 +116,8 @@ std::vector< TransformationNode* >::const_iterator TransformationTree::checkForM
 {
     for(std::vector<TransformationNode *>::const_iterator it = node.childs.begin(); it != node.childs.end(); it++)
     {
-	if((*it)->frameName == to)
-	    return it;
+        if((*it)->frameName == to)
+            return it;
     }
     
     return node.childs.end();
@@ -133,46 +134,44 @@ bool TransformationTree::getTransformationChain(std::string from, std::string to
     std::vector<TransformationNode *> curLevel;
     curLevel.push_back(&node);
     
-    for(int i = 0; i < maxSeekDepth && curLevel.size(); i++) {
-	std::vector<TransformationNode *> nextLevel;
-
-	for(std::vector<TransformationNode *>::iterator it = curLevel.begin(); it != curLevel.end(); it++)
-	{
-	    //expand tree node
-	    addMatchingTransforms((*it)->frameName, *it);
-	    
-	    //check if a child of the node matches the wanted frame
-	    std::vector< TransformationNode* >::const_iterator candidate = checkForMatchingChildFrame(to, **it);
-	    if(candidate != (*it)->childs.end())
-	    {
-		LOG_DEBUG_S << "Found Transformation chain from " << from << " to " << to;
+    for(int i = 0; i < maxSeekDepth && curLevel.size(); i++)
+    {
+        std::vector<TransformationNode *> nextLevel;
+        for(std::vector<TransformationNode *>::iterator it = curLevel.begin(); it != curLevel.end(); it++)
+        {
+            //expand tree node
+            addMatchingTransforms((*it)->frameName, *it);
+            
+            //check if a child of the node matches the wanted frame
+            std::vector< TransformationNode* >::const_iterator candidate = checkForMatchingChildFrame(to, **it);
+            if(candidate != (*it)->childs.end())
+            {
+                LOG_DEBUG_S << "Found Transformation chain from " << from << " to " << to;
                 LOG_DEBUG_S << "Chain is (reverse) : ";
-		
-		TransformationNode *curNode = *candidate;
-		result.reserve(i + 1);
-		
-		//found a valid transformation
-		while(curNode->parent)
-		{
-		    result.push_back(curNode->parentToCurNode);
-		    LOG_DEBUG_S << "   " << curNode->frameName << " " << curNode->parentToCurNode->getTargetFrame() << "<->" << curNode->parentToCurNode->getSourceFrame();
-		    
-		    curNode = curNode->parent;
-		}
-		LOG_DEBUG_S << "   " << curNode->frameName << std::endl;
-		
-		return true;
-	    }
-	    
-	    //add childs of current level to search area for next level
-	    nextLevel.insert(nextLevel.end(), (*it)->childs.begin(), (*it)->childs.end());
-	}
-	
-	curLevel = nextLevel;
+                
+                TransformationNode *curNode = *candidate;
+                result.reserve(i + 1);
+                
+                //found a valid transformation
+                while(curNode->parent)
+                {
+                    result.push_back(curNode->parentToCurNode);
+                    LOG_DEBUG_S << "   " << curNode->frameName << " " << curNode->parentToCurNode->getTargetFrame() << "<->" << curNode->parentToCurNode->getSourceFrame();
+                    
+                    curNode = curNode->parent;
+                }
+                LOG_DEBUG_S << "   " << curNode->frameName << std::endl;
+                
+                return true;
+            }
+            
+            //add childs of current level to search area for next level
+            nextLevel.insert(nextLevel.end(), (*it)->childs.begin(), (*it)->childs.end());
+        }
+        curLevel = nextLevel;
     }
     
     LOG_DEBUG_S << "could not find result for " << from << " " << to;
-
     return false;
 }
 
@@ -188,13 +187,14 @@ TransformationElement* InverseTransformationElement::getElement()
 
 bool InverseTransformationElement::getTransformation(const base::Time& atTime, bool doInterpolation, transformer::TransformationType& tr)
 {
-    if(nonInverseElement->getTransformation(atTime, doInterpolation, tr)){
-	Eigen::Affine3d tr2(Eigen::Affine3d::Identity());
-	tr2 = tr;
-	tr2 = tr2.inverse();
-	tr.setTransform(tr2);
+    if(nonInverseElement->getTransformation(atTime, doInterpolation, tr))
+    {
+        Eigen::Affine3d tr2(Eigen::Affine3d::Identity());
+        tr2 = tr;
+        tr2 = tr2.inverse();
+        tr.setTransform(tr2);
         std::swap(tr.sourceFrame, tr.targetFrame);
-	return true;
+        return true;
     }
     return false;
 };
@@ -205,8 +205,8 @@ DynamicTransformationElement::DynamicTransformationElement(const std::string& so
     //giving a buffersize of zero means no buffer limitation at all
     //giving a period of zero means, block until next sample is available
     streamIdx = aggregator.registerStream<TransformationType>(
-	    boost::bind( &transformer::DynamicTransformationElement::aggregatorCallback , this, _1, _2 ), 
-	    0, base::Time(), priority, sourceFrame + std::string("2") + targetFrame);
+        boost::bind( &transformer::DynamicTransformationElement::aggregatorCallback , this, _1, _2 ), 
+        0, base::Time(), priority, sourceFrame + std::string("2") + targetFrame);
 }
 
 DynamicTransformationElement::~DynamicTransformationElement()
@@ -222,7 +222,7 @@ void DynamicTransformationElement::aggregatorCallback(const base::Time& ts, cons
     for(std::vector<boost::function<void (const base::Time &ts)> >::const_iterator it = elementChangedCallbacks.begin();
     it != elementChangedCallbacks.end(); it++)
     {
-	(*it)(ts);
+        (*it)(ts);
     }
 }
 
@@ -230,69 +230,64 @@ bool DynamicTransformationElement::getTransformation(const base::Time& atTime, b
 {
     if(!gotTransform)
     {
-	//no sample available, return
-	return false;
+        //no sample available, return
+        return false;
     }
     
     if(doInterpolation)
     {
-	double timeForward = (atTime - lastTransformTime).toSeconds();
-	
-	if(timeForward < 0) 
-	{
-	    throw std::runtime_error("Error, time of sample is lower than transformation time"); 
-	}
-	
-	if(timeForward == 0) 
-	{
-	    //transform time is equal to sample time, no interpolation needed
-	    result = lastTransform;
+        double timeForward = (atTime - lastTransformTime).toSeconds();
+        if(timeForward < 0) 
+        {
+            throw std::runtime_error("Error, time of sample is lower than transformation time"); 
+        }
+        if(timeForward == 0) 
+        {
+            //transform time is equal to sample time, no interpolation needed
+            result = lastTransform;
+            return true;
+        }
 
-	    return true;
-	}
+        std::pair<base::Time, TransformationType> next_sample;
+        if(!aggregator.getNextSample(streamIdx, next_sample))
+        {
+            //std::cout << "Transformer: could not get next sample" << std::endl;
+            //not enought samples for itnerpolation available
+            return false;
+        }
+        
+        TransformationType interpolated;
+        interpolated.initSane();
 
-	std::pair<base::Time, TransformationType> next_sample;
-	
-	if(!aggregator.getNextSample(streamIdx, next_sample))
-	{
-	    //std::cout << "Transformer: could not get next sample" << std::endl;
-	    //not enought samples for itnerpolation available
-	    return false;
-	}
-	
-	TransformationType interpolated;
-	interpolated.initSane();
+        double timeBetweenTransforms = (next_sample.first - lastTransformTime).toSeconds();
+        assert(timeBetweenTransforms > timeForward);
+        
+        double factor = timeForward / timeBetweenTransforms;
+        
+        Eigen::Quaterniond start_r(lastTransform.orientation);
+        Eigen::Quaterniond end_r(next_sample.second.orientation);
+        
+        interpolated.orientation = (start_r.slerp(factor, end_r));
+        
+        Eigen::Vector3d start_t(lastTransform.position);
+        Eigen::Vector3d end_t(next_sample.second.position);
+        
+        interpolated.position = factor * start_t + (1.0-factor) * end_t; 
 
-	double timeBetweenTransforms = (next_sample.first - lastTransformTime).toSeconds();
+        // perform linear interpolation of uncertainties
+        interpolated.cov_position = 
+            factor * lastTransform.cov_position + 
+            (1.0-factor) * next_sample.second.cov_position;
 
-	assert(timeBetweenTransforms > timeForward);
-	
-	double factor = timeForward / timeBetweenTransforms;
-	
-	Eigen::Quaterniond start_r(lastTransform.orientation);
-	Eigen::Quaterniond end_r(next_sample.second.orientation);
-	
-	interpolated.orientation = (start_r.slerp(factor, end_r));
-	
-	Eigen::Vector3d start_t(lastTransform.position);
-	Eigen::Vector3d end_t(next_sample.second.position);
-	
-	interpolated.position = factor * start_t + (1.0-factor) * end_t; 
+        interpolated.cov_orientation = 
+            factor * lastTransform.cov_orientation + 
+            (1.0-factor) * next_sample.second.cov_orientation;
 
-	// perform linear interpolation of uncertainties
-	interpolated.cov_position = 
-	    factor * lastTransform.cov_position + 
-	    (1.0-factor) * next_sample.second.cov_position;
-
-	interpolated.cov_orientation = 
-	    factor * lastTransform.cov_orientation + 
-	    (1.0-factor) * next_sample.second.cov_orientation;
-
-	result = interpolated;
-    } else {
-	result = lastTransform;
+        result = interpolated;
+    } else 
+    {
+        result = lastTransform;
     }
-
     return true;
 };
 
@@ -300,9 +295,8 @@ void TransformationTree::clear()
 {
     for(std::vector<TransformationElement *>::iterator it = availableElements.begin(); it != availableElements.end(); it++)
     {
-	delete *it;
+        delete *it;
     }
-    
     availableElements.clear();
 }
 
@@ -316,7 +310,7 @@ Transformation& Transformer::registerTransformation(std::string sourceFrame, std
     //check if a transformation chain for this transformation exists
     if(transformationTree.getTransformationChain(ret->getSourceFrame(), ret->getTargetFrame(), trChain))
     {
-	ret->setTransformationChain(trChain);
+    ret->setTransformationChain(trChain);
     }
     
     return *ret;
@@ -344,19 +338,19 @@ void Transformer::recomputeAvailableTransformations()
     //seek through all available data streams and update transformation chains
     for(std::vector<Transformation *>::iterator transform = transformations.begin(); transform != transformations.end(); transform++)
     {
-	std::vector< TransformationElement* > trChain;
-	
-	if(transformationTree.getTransformationChain((*transform)->getSourceFrame(), (*transform)->getTargetFrame(), trChain))
-	{
-	    (*transform)->setTransformationChain(trChain);
-	}
+        std::vector< TransformationElement* > trChain;
+        
+        if(transformationTree.getTransformationChain((*transform)->getSourceFrame(), (*transform)->getTargetFrame(), trChain))
+        {
+            (*transform)->setTransformationChain(trChain);
+        }
     }
 }
 
 void Transformer::pushDynamicTransformation(const transformer::TransformationType& tr)
 {
     if(tr.sourceFrame == "" || tr.targetFrame == "")
-	throw std::runtime_error("Dynamic transformation with empty target or source frame given");
+        throw std::runtime_error("Dynamic transformation with empty target or source frame given");
 
     if(tr.time.isNull())
     {
@@ -367,24 +361,19 @@ void Transformer::pushDynamicTransformation(const transformer::TransformationTyp
     std::map<std::pair<std::string, std::string>, int>::iterator it = transformToStreamIndex.find(std::make_pair(tr.sourceFrame, tr.targetFrame));
     
     //we got an unknown transformation
-    if(it == transformToStreamIndex.end()) {
-
-	//create a representation of the dynamic transformation
-	DynamicTransformationElement *dynamicElement = new DynamicTransformationElement(tr.sourceFrame, tr.targetFrame, aggregator, priority);
-	
-	int streamIdx = dynamicElement->getStreamIdx();
-	
-	transformToStreamIndex[std::make_pair(tr.sourceFrame, tr.targetFrame)] = streamIdx;
-	
-	LOG_DEBUG_S << "Registering new stream for transformation from " << tr.sourceFrame << " to " << tr.targetFrame << " index is " << streamIdx;
-	
-	//add new dynamic element to transformation tree
-	transformationTree.addTransformation(dynamicElement);
-
-	recomputeAvailableTransformations();
-	
-	it = transformToStreamIndex.find(std::make_pair(tr.sourceFrame, tr.targetFrame));
-	assert(it != transformToStreamIndex.end());
+    if(it == transformToStreamIndex.end())
+    {
+        //create a representation of the dynamic transformation
+        DynamicTransformationElement *dynamicElement = new DynamicTransformationElement(tr.sourceFrame, tr.targetFrame, aggregator, priority);
+        int streamIdx = dynamicElement->getStreamIdx();
+        transformToStreamIndex[std::make_pair(tr.sourceFrame, tr.targetFrame)] = streamIdx;
+        LOG_DEBUG_S << "Registering new stream for transformation from " << tr.sourceFrame << " to " << tr.targetFrame << " index is " << streamIdx;
+        
+        //add new dynamic element to transformation tree
+        transformationTree.addTransformation(dynamicElement);
+        recomputeAvailableTransformations();
+        it = transformToStreamIndex.find(std::make_pair(tr.sourceFrame, tr.targetFrame));
+        assert(it != transformToStreamIndex.end());
     }
 
     //push sample
@@ -394,7 +383,7 @@ void Transformer::pushDynamicTransformation(const transformer::TransformationTyp
 void Transformer::pushStaticTransformation(const transformer::TransformationType& tr)
 {
     if(tr.sourceFrame == "" || tr.targetFrame == "")
-	throw std::runtime_error("Static transformation with empty target or source frame given");
+        throw std::runtime_error("Static transformation with empty target or source frame given");
     
     transformationTree.addTransformation(new StaticTransformationElement(tr.sourceFrame, tr.targetFrame, tr));
     recomputeAvailableTransformations();
@@ -404,20 +393,19 @@ void Transformer::setFrameMapping(const std::string& frameName, const std::strin
 {
     for(std::vector<Transformation *>::iterator transform = transformations.begin(); transform != transformations.end(); transform++)
     {
-	(*transform)->setFrameMapping(frameName, newName);
+        (*transform)->setFrameMapping(frameName, newName);
     }
     recomputeAvailableTransformations();
 }
     
 void Transformer::addTransformationChain(std::string from, std::string to, const std::vector< TransformationElement* >& chain)
 {
-    for(std::vector<Transformation *>::iterator it = transformations.begin();
-	it != transformations.end(); it++) 
+    for(std::vector<Transformation *>::iterator it = transformations.begin(); it != transformations.end(); it++) 
     {
-	if((*it)->getSourceFrame() == from && (*it)->getTargetFrame() == to)
-	{
-	    (*it)->setTransformationChain(chain);
-	}
+        if((*it)->getSourceFrame() == from && (*it)->getTargetFrame() == to)
+        {
+            (*it)->setTransformationChain(chain);
+        }
     }
 }
 
@@ -441,7 +429,7 @@ void Transformer::clear()
     //clear all known transformation chains
     for(std::vector<Transformation *>::iterator it = transformations.begin(); it != transformations.end(); it++)
     {
-	(*it)->reset();
+        (*it)->reset();
     }
 
     //clear index mapping
@@ -461,7 +449,7 @@ Transformer::~Transformer()
 {
     for(std::vector<Transformation *>::iterator it = transformations.begin(); it != transformations.end(); it++)
     {
-	delete *it;
+        delete *it;
     }
     transformations.clear();
 }
