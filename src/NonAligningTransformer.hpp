@@ -16,7 +16,7 @@ public:
     void setTransformation(const base::Time& atTime, const TransformationType& tr);
     virtual void setTransformationChangedCallback(boost::function<void (const base::Time &ts)> callback)
     {
-	elementChangedCallback = callback;
+        elementChangedCallback = callback;
     };
 
 private:
