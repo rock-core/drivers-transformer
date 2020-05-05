@@ -30,7 +30,7 @@ module Transformer
     # A geometric frame, referenced to by name
     class Frame
         # The name of the frame
-        attr_accessor :name    
+        attr_accessor :name
 
         def hash; name.hash end
         def eql?(other)
@@ -50,7 +50,7 @@ module Transformer
         # Name of the source frame
         attr_reader :from
         # Name of the target frame
-        attr_reader :to   
+        attr_reader :to
 
         def initialize(from, to)
             @from = from
@@ -59,6 +59,27 @@ module Transformer
 
         def pretty_print(pp)
             pp.text "#{from}2#{to}"
+        end
+
+        # Return a new Transform with frame names changed
+        #
+        # @param [String=>String] mapping a mapping from the current frame name
+        #   to the new desired frame name
+        # @return [Transform]
+        def rename_frames(mapping)
+            result = dup
+            result.rename_frames!(mapping)
+            result
+        end
+
+        # Change the frame names of this transform in-place
+        #
+        # @param [String=>String] mapping a mapping from the current frame name
+        #   to the new desired frame name
+        # @return [void]
+        def rename_frames!(mapping)
+            @from = mapping[from] || from
+            @to   = mapping[to] || to
         end
     end
 
@@ -76,6 +97,16 @@ module Transformer
             super
             @translation = old.translation.dup
             @rotation = old.rotation.dup
+        end
+
+        # Convert this StaticTransform to an Eigen isometry
+        #
+        # @return [Eigen::Isometry3]
+        def to_isometry
+            iso = Eigen::Isometry3.new
+            iso.translate(translation)
+            iso.rotate(rotation)
+            iso
         end
 
         def pretty_print(pp)
@@ -99,7 +130,7 @@ module Transformer
             super
             @producer = old.producer.dup
         end
-        
+
         def pretty_print(pp)
             super
             pp.text ": produced by #{producer}"
@@ -144,6 +175,19 @@ module Transformer
                     cur_node = cur_node.parent
                 end
                 super(cur_node.frame, to)
+            end
+        end
+
+        # Enumerate the links in the chain
+        #
+        # @yieldparam [Transform] link a link as declared in the transformer
+        #   configuration
+        # @yieldparam [Boolean] inverse whether this link is applied directly
+        #   (false) or inverted (true) within this chain
+        def each
+            return enum_for(__method__) if !block_given?
+            links.zip(inversions).each do |link, inverse|
+                yield(link, inverse)
             end
         end
 
@@ -210,7 +254,7 @@ module Transformer
 	    end
         end
     end
-    
+
     # Exception raised when a transformation requested in #transformation_chain
     # cannot be found
     class TransformationNotFound < RuntimeError
@@ -263,7 +307,7 @@ module Transformer
 
         # Returns the set of transformations in +transforms+ where
         #
-        # * +node+ is a starting point 
+        # * +node+ is a starting point
         # * the transformation is not +node.parent+ => +node+
         #
         # The returned array is an array of elements [transformation, inverse]
@@ -283,8 +327,37 @@ module Transformer
             return ret
         end
 
+        # Resolve a static transformation between two frames
+        #
+        # @param [String] from the resulting transformation's source frame
+        # @param [String] to the resulting transformation's to frame
+        # @return [Eigen::Isometry3]
+        # @raises TransformationNotFound
+        def resolve_static_chain(from, to)
+            chain = transformation_chain(from, to, only_static: true)
+            chain.each.inject(Eigen::Isometry3.Identity) do |a2b, (transform, inverse)|
+                if inverse
+                    c2b = transform.to_isometry
+                    b2c = c2b.inverse
+                else
+                    b2c = transform.to_isometry
+                end
+
+                b2c * a2b
+            end
+        end
+
         # Returns the shortest transformation chains that link +from+ to +to+
-        def transformation_chain(from, to, additional_producers = Hash.new)
+        #
+        # @param [String] from the resulting chain's source frame
+        # @param [String] to the resulting chain's target frame
+        # @param [String=>Object] additional_producers additional dynamic
+        #   transformations that should be considered for this chain only
+        # @param [Boolean] only_static whether only static transformations
+        #   should be used for the resolution (true) or both static and dynamic
+        #   (false)
+        # @return [TransformChain]
+        def transformation_chain(from, to, additional_producers = Hash.new, only_static: false)
             from = from.to_s
             to = to.to_s
             checker.check_frame(from, conf.frames)
@@ -311,6 +384,8 @@ module Transformer
             end
 
             conf.transforms.each_value do |trsf|
+                next if only_static && trsf.kind_of?(DynamicTransform)
+
                 if !known_transforms.include?([trsf.from, trsf.to])
                     all_transforms[trsf.from] << [trsf, false]
                     all_transforms[trsf.to]   << [trsf, true]
@@ -373,7 +448,7 @@ module Transformer
             errors = []
             if(!frames.include?(transformation.from))
                 errors << "transformation from #{transformation.from} to #{transformation.to} uses unknown frame #{transformation.from}, known frames: #{frames.to_a.sort.join(", ")}"
-            end	
+            end
 
             if(!frames.include?(transformation.to))
                 errors << "transformation from #{transformation.from} to #{transformation.to} uses unknown frame #{transformation.to}, known frames: #{frames.to_a.sort.join(", ")}"
@@ -479,6 +554,37 @@ module Transformer
             transforms.empty?
         end
 
+        # Rename some frames while keeping internal consistency
+        #
+        # Frames in transforms should not be changed, that is changing one
+        # transform would make the whole configuration invalid.
+        #
+        # This method allows to change some frame names while keeping the
+        # configuration's internal consistency
+        #
+        # @param [String=>String] a mapping from the current name to the new
+        #   desired name
+        def rename_frames(mapping)
+            frames = Set.new
+            @frames.each { |f| frames << (mapping[f] || f) }
+
+            transforms = Hash.new
+            @transforms.each do |(from, to), tr|
+                tr = tr.rename_frames(mapping).freeze
+                transforms[[tr.from, tr.to]] = tr
+            end
+
+            example_transforms = Hash.new
+            @example_transforms.each do |(from, to), tr|
+                tr = tr.rename_frames(mapping).freeze
+                example_transforms[[tr.from, tr.to]] = tr
+            end
+
+            @frames = frames
+            @transforms = transforms
+            @example_transforms = example_transforms
+        end
+
         # Adds the information from another Configuration object to self.
         # In case some definitions are colliding, the information from +conf+ is
         # used
@@ -486,8 +592,8 @@ module Transformer
         # @param [Configuration] conf
         # @return self
         def merge(conf)
-            transforms.merge!(conf.transforms.map_value { |_, v| v.dup })
-            example_transforms.merge!(conf.example_transforms.map_value { |_, v| v.dup })
+            transforms.merge!(conf.transforms)
+            example_transforms.merge!(conf.example_transforms)
             @frames |= conf.frames
             self
         end
@@ -526,7 +632,7 @@ module Transformer
             tr = DynamicTransform.new(from, to, producer)
 	    add_transform(tr)
         end
-    
+
         # Declare a transformation
         #
         # @see static_transform dynamic_transform
@@ -535,6 +641,7 @@ module Transformer
 	    if tr.from == tr.to
 		raise ArgumentError, "trying to register a transformation from #{tr.from} onto itself"
 	    end
+            tr.freeze
             transforms[[tr.from, tr.to]] = tr
 	end
 
@@ -547,6 +654,7 @@ module Transformer
 	    if tr.from == tr.to
 		raise ArgumentError, "trying to register a transformation from #{tr.from} onto itself"
 	    end
+            tr.freeze
             example_transforms[[tr.from, tr.to]] = tr
         end
 
@@ -637,12 +745,17 @@ module Transformer
             tr
         end
 
+        # @deprecated for backward compatibility only, renamed to {#has_transform?} for consistency with the rest of the API
+        def has_transformation?(from, to)
+            has_transform?(from, to)
+        end
+
         # Checks if a transformation between the provided frames exist.
         #
         # It will return true if such a transformation has been registered,
         # false otherwise, and raises ArgumentError if either +from+ or +to+ are
         # not registered frames.
-        def has_transformation?(from, to)
+        def has_transform?(from, to)
             result = transforms.has_key?([from, to])
 
             if !result
@@ -655,10 +768,15 @@ module Transformer
             result
         end
 
+        # @deprecated for backward compatibility only, renamed to {#transform_for} for consistency with the rest of the API
+        def transformation_for(from, to)
+            transform_for(from, to)
+        end
+
         # Returns the transformation object that represents the from -> to
         # transformation, if there is one. If none is found, raises
         # ArgumentError
-        def transformation_for(from, to)
+        def transform_for(from, to)
             result = transforms[[from, to]]
             if !result
                 if !has_frame?(from)
@@ -721,7 +839,7 @@ module Transformer
                 pp.breakable
                 pp.text "Available Frames:"
                 pp.nest(2) do
-                    frames.each do |i| 
+                    frames.each do |i|
                         pp.breakable
                         i.pretty_print(pp)
                     end

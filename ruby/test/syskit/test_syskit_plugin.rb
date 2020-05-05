@@ -6,6 +6,7 @@ describe Transformer::SyskitPlugin do
     before do
         Roby.app.import_types_from 'base'
         Roby.app.import_types_from 'transformer'
+        Roby.app.using_task_library 'transformer'
         Syskit.conf.transformer_warn_about_unset_frames = false
 
         @transform_producer_m = Syskit::TaskContext.new_submodel name: 'TransformProducer' do
@@ -54,7 +55,7 @@ describe Transformer::SyskitPlugin do
             end
         task = syskit_stub_deploy_and_configure(task_m)
 
-        statics = task.orocos_task.static_transformations
+        statics = task.properties.static_transformations
         assert_equal 1, statics.size
         assert_equal Eigen::Vector3.new(1, 0, 0), statics.to_a.first.position
         assert_equal Eigen::Quaternion.Identity, statics.to_a.first.orientation
@@ -69,8 +70,8 @@ describe Transformer::SyskitPlugin do
             end
         task = syskit_stub_deploy_and_configure(task_m)
 
-        assert_equal 'object_global', task.orocos_task.object_frame
-        assert_equal 'world_global', task.orocos_task.world_frame
+        assert_equal 'object_global', task.properties.object_frame
+        assert_equal 'world_global', task.properties.world_frame
     end
 
     it "propagates data port frame information forward in the dataflow" do
@@ -111,7 +112,7 @@ describe Transformer::SyskitPlugin do
 
     it "instanciates dynamic producers" do
         transform_producer_m = self.transform_producer_m
-        syskit_stub(transform_producer_m)
+        syskit_stub_requirements(transform_producer_m)
         task_m = self.data_consumer_m.
             use_frames('object' => 'object_global', 'world' => 'world_global').
             transformer do
@@ -155,7 +156,7 @@ describe Transformer::SyskitPlugin do
         multi_producer_m.provides srv_m, as: 'test',
             'transforms' => 'alternate_transforms'
 
-        syskit_stub(multi_producer_m)
+        syskit_stub_requirements(multi_producer_m)
         task_m = self.data_consumer_m.
             use_frames('object' => 'object_global', 'world' => 'world_global').
             transformer do

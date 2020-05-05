@@ -24,10 +24,6 @@ module Transformer
             end
         end
 
-        # The set of static transformations that should be provided to the
-        # component at configuration time
-        attribute(:static_transforms) { Array.new }
-
         # Returns the transformation that this port provides, using the actual
         # frames (i.e. not the task-level frames, but the frames actually
         # selected).
@@ -173,14 +169,14 @@ module Transformer
             super if defined? super
             if tr = self.model.transformer
                 selected_frames.each do |local_frame, global_frame|
-                    if orocos_task.has_property?("#{local_frame}_frame")
+                    if has_property?("#{local_frame}_frame")
                         property("#{local_frame}_frame").write(global_frame)
                     end
                 end
 
-                if !static_transforms.empty?
-                    orocos_task.static_transformations = static_transforms.map do |trsf|
-                        rbs = Types::Base::Samples::RigidBodyState.new
+                if has_property?(:static_transformations)
+                    self.properties.static_transformations = static_transforms.map do |trsf|
+                        rbs = Types.base.samples.RigidBodyState.new
                         rbs.zero!
                         rbs.time = Time.now
                         rbs.sourceFrame = trsf.from
@@ -199,6 +195,15 @@ module Transformer
         #
         # It can also be used to define transformer specifications on tasks
         # that don't have one (for instance to tie ports to frames)
-        def transformer(*args, &block); orogen_model.transformer(*args, &block) end
+        def transformer(&block)
+            extension = orogen_model.transformer ||
+                TransformerPlugin::Extension.new('transformer', orogen_model)
+            orogen_model.register_extension(extension)
+
+            if block
+                extension.instance_eval(&block)
+            end
+            extension
+        end
     end
 end

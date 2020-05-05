@@ -2,14 +2,14 @@ module Transformer
     # Module used to add the 'transforms' annotations to the graph output
     module GraphvizExtension
         def frame_transform_id(task, from, to, prefix= "")
-            "frames_#{prefix}#{from.gsub(/[^\w]+/, '_')}_#{to.gsub(/[^\w]+/, '_')}_producer"
+            "frames_#{prefix}#{from}_#{to}_producer"
         end
 
         def add_frame_transform(task, from, to, prefix = "")
             producer = frame_transform_id(task, from, to, prefix)
             add_vertex(task, producer, "label=\"\",shape=circle")
-            add_edge(["frames_#{prefix}#{from.gsub(/[^\w]+/, '_')}", task], [producer, task], "dir=none")
-            add_edge([producer, task], ["frames_#{prefix}#{to.gsub(/[^\w]+/, '_')}", task], "")
+            add_edge(["frames_#{prefix}#{from}", task], [producer, task], "dir=none")
+            add_edge([producer, task], ["frames_#{prefix}#{to}", task], "")
             producer
         end
 
@@ -25,13 +25,12 @@ module Transformer
                     next if !selected_frame && !selected_transform
 
                     if selected_frame
-                        frame_id = "frames_#{dev.name}"
-                        add_vertex(device_task, frame_id, "label=\"dev(#{dev.name})=#{selected_frame}\",shape=ellipse")
+                        add_vertex(device_task, "frames_#{dev.name}", "label=\"dev(#{dev.name})=#{selected_frame}\",shape=ellipse")
                     end
                     if selected_transform
                         from, to = selected_transform.from, selected_transform.to
-                        add_vertex(device_task, "frames_dev_#{dev.name}#{from.gsub(/[^\w]+/, '_')}", "label=\"dev(#{dev.name}).from=#{from}\",shape=ellipse#{",color=red" if !from}")
-                        add_vertex(device_task, "frames_dev_#{dev.name}#{to.gsub(/[^\w]+/, '_')}", "label=\"dev(#{dev.name}).to=#{to}\",shape=ellipse#{",color=red" if !from}")
+                        add_vertex(device_task, "frames_dev_#{dev.name}#{from}", "label=\"dev(#{dev.name}).from=#{from}\",shape=ellipse#{",color=red" if !from}")
+                        add_vertex(device_task, "frames_dev_#{dev.name}#{to}", "label=\"dev(#{dev.name}).to=#{to}\",shape=ellipse#{",color=red" if !from}")
                         transform_id = add_frame_transform(device_task, from, to, "dev_#{dev.name}")
                     end
 
@@ -57,6 +56,8 @@ module Transformer
 
             # Add frame information stored in tasks (i.e. assigned frames)
             plan.find_local_tasks(Syskit::TaskContext).each do |task|
+                has_inputs  = task.each_input_port.find { true }
+                has_outputs = task.each_output_port.find { true }
                 tr = task.model.transformer
                 next if !tr
 
@@ -66,21 +67,37 @@ module Transformer
                                 ",color=red"
                             end
                     add_vertex(task, "frames_#{frame}", "label=\"#{frame}=#{task.selected_frames[frame]}\",shape=ellipse#{color}")
-                    add_edge(["inputs", task], ["frames_#{frame}", task], "style=invis")
-                    add_edge(["frames_#{frame}", task], ["outputs", task], "style=invis")
+                    if has_inputs
+                        add_edge(["inputs", task], ["frames_#{frame}", task], "style=invis")
+                    end
+                    if has_outputs
+                        add_edge(["frames_#{frame}", task], ["outputs", task], "style=invis")
+                    end
                 end
+                seen_transformations = Set.new
                 tr.each_transformation do |trsf|
-                    add_vertex(task, "frames_#{trsf.from}_#{trsf.to}_producer", "label=\"\",shape=circle")
-                    add_edge(["frames_#{trsf.from}", task], ["frames_#{trsf.from}_#{trsf.to}_producer", task], "dir=none")
-                    add_edge(["frames_#{trsf.from}_#{trsf.to}_producer", task], ["frames_#{trsf.to}", task], "")
+                    add_frame_transform(task, trsf.from, trsf.to)
+                    seen_transformations << [trsf.from, trsf.to]
                 end
                 tr.each_transform_port do |port, trsf|
-                    add_edge([port, task], ["frames_#{trsf.from}_#{trsf.to}_producer", task], "dir=none,constraint=false")
+                    if !seen_transformations.include?([trsf.from, trsf.to])
+                        add_frame_transform(task, trsf.from, trsf.to)
+                        seen_transformations << [trsf.from, trsf.to]
+                    end
+                    add_edge_between_frame_and_port(task, port,  "frames_#{trsf.from}_#{trsf.to}_producer")
                 end
                 tr.each_annotated_port do |port, annotated_frame_name|
-                    add_edge([port, task], ["frames_#{annotated_frame_name}", task], "dir=none,constraint=false")
+                    add_edge_between_frame_and_port(task, port, "frames_#{annotated_frame_name}")
                 end
             end
+        end
+
+        def add_edge_between_frame_and_port(task, port, frame_name)
+            edge_from, edge_to = port, frame_name
+            if port.kind_of?(OroGen::Spec::OutputPort)
+                edge_from, edge_to = edge_to, edge_from
+            end
+            add_edge([edge_from, task], [edge_to, task], "dir=none")
         end
     end
 end
