@@ -11,11 +11,12 @@ public:
     NonAlignedDynamicTransformationElement(const std::string& sourceFrame, const std::string& targetFrame);
     virtual ~NonAlignedDynamicTransformationElement() {};
     virtual bool getTransformation(const base::Time& atTime, bool doInterpolation, TransformationType& result);
+    virtual bool isStatic() { return false; }
 
     void setTransformation(const base::Time& atTime, const TransformationType& tr);
     virtual void setTransformationChangedCallback(boost::function<void (const base::Time &ts)> callback)
     {
-	elementChangedCallback = callback;
+        elementChangedCallback = callback;
     };
 
 private:
