@@ -238,7 +238,8 @@ bool DynamicTransformationElement::getTransformation(const base::Time& atTime, b
     {
         double timeForward = (atTime - lastTransformTime).toSeconds();
         if(timeForward < 0) 
-        {
+        {   
+            LOG_ERROR_S << "Error, time of sample is lower than transformation time";
             throw std::runtime_error("Error, time of sample is lower than transformation time"); 
         }
         if(timeForward == 0) 
@@ -319,9 +320,10 @@ Transformation& Transformer::registerTransformation(std::string sourceFrame, std
 void Transformer::unregisterTransformation(Transformation* transformation)
 {
     std::vector<Transformation *>::iterator it = std::find(transformations.begin(), transformations.end(), transformation);
-    if(it == transformations.end())
+    if(it == transformations.end()){
+        LOG_ERROR_S << "Tried to unregister non existing transformation";
         throw std::runtime_error("Tried to unregister non existing transformation");
-
+    }
     transformations.erase(it);
     delete transformation;
 }
@@ -349,13 +351,15 @@ void Transformer::recomputeAvailableTransformations()
 
 void Transformer::pushDynamicTransformation(const transformer::TransformationType& tr)
 {
-    if(tr.sourceFrame == "" || tr.targetFrame == "")
+    if(tr.sourceFrame == "" || tr.targetFrame == ""){
+        LOG_ERROR_S << "Dynamic transformation with empty target or source frame given";
         throw std::runtime_error("Dynamic transformation with empty target or source frame given");
-
+    }
     if(tr.time.isNull())
     {
         std::stringstream msg;
         msg << "Dynamic transformation (" << tr.sourceFrame << " => " << tr.targetFrame << ") has no timestamp!";
+        LOG_ERROR_S << msg.str();
         throw std::runtime_error(msg.str());
     }
     std::map<std::pair<std::string, std::string>, int>::iterator it = transformToStreamIndex.find(std::make_pair(tr.sourceFrame, tr.targetFrame));
@@ -382,9 +386,10 @@ void Transformer::pushDynamicTransformation(const transformer::TransformationTyp
 
 void Transformer::pushStaticTransformation(const transformer::TransformationType& tr)
 {
-    if(tr.sourceFrame == "" || tr.targetFrame == "")
-        throw std::runtime_error("Static transformation with empty target or source frame given");
-    
+    if(tr.sourceFrame == "" || tr.targetFrame == ""){
+         LOG_ERROR_S << "Static transformation with empty target or source frame given";
+         throw std::runtime_error("Static transformation with empty target or source frame given");
+    }
     transformationTree.addTransformation(new StaticTransformationElement(tr.sourceFrame, tr.targetFrame, tr));
     recomputeAvailableTransformations();
 }
