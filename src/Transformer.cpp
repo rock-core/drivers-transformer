@@ -261,7 +261,11 @@ bool DynamicTransformationElement::getTransformation(const base::Time& atTime, b
         interpolated.initSane();
 
         double timeBetweenTransforms = (next_sample.first - lastTransformTime).toSeconds();
-        assert(timeBetweenTransforms > timeForward);
+        if(timeBetweenTransforms <= timeForward)
+        {
+            LOG_ERROR_S << "Error, time of sample is higher than next transformation time";
+            throw std::runtime_error("Error, time of sample is higher than next transformation time");
+        }
         
         double factor = timeForward / timeBetweenTransforms;
         
