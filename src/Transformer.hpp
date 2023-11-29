@@ -218,11 +218,18 @@ namespace transformer
          * 
          * Note, the time of the transformation advances if one calls step() on the
          * transformer.
+         *
+         * @param sourceFrame  The source frame of the transformation
+         * @param targetFrame  The target frame of the transformation
+         * @return  a Transformation; it is valid to take the address of
+         *          this object.
          * */
         Transformation &registerTransformation(std::string sourceFrame, std::string targetFrame);
 
         /**
          * Returns a vector of the registered transformations.
+         *
+         * @return a list of all transformations
          * */
         const std::vector<Transformation *> &getRegisteredTransformations()
         {
@@ -233,6 +240,12 @@ namespace transformer
          * Unregisteres a transformation from the transfromation stack.
          * 
          * This removes and deletes the given transformation
+         *
+         * @param transformation  The transformation to be removed. This
+         *                        transformation must have been obtained using
+         *                        registerTransformation() or
+         *                        getRegisteredTransformations(). All
+         *                        references to this object become invalid.
          * */
         void unregisterTransformation(Transformation *transformation);
             
@@ -240,6 +253,13 @@ namespace transformer
          * Registers a callback that will be called every time a new transformation is available 
          * for the given Transformation handle.
          * 
+         * @sa Transformation::registerUpdateCallback
+         *
+         * @param transform  The transformation to associate the callback with.
+         *                   This transformation must have been obtained using
+         *                   registerTransformation() or
+         *                   getRegisteredTransformations().
+         * @param callback   The callback to be called.
          * */
         void registerTransformCallback(Transformation &transform , boost::function<void (const base::Time &ts, const Transformation &t)> callback) 
         {
@@ -250,6 +270,24 @@ namespace transformer
          * This function registes a new data stream together with an callback. 
          * 
          * The callback will be called every time a new data sample is available.
+         *
+         * @sa aggregator::StreamAligner::registerStream
+         *
+         * @param dataPeriod  time between sensor readings. This will be used
+         *                    to estimate when the next reading should arrive,
+         *                    so out of order arrivals are possible. Set to 0
+         *                    if not a periodic stream. When set to a negative
+         *                    value, the calculation of the buffer is performed
+         *                    for that period, however no lookahead is set.
+         * @param callback    will be called for data gone through the
+         *                    synchronization process
+         * @param priority    if streams have data with equal timestamps, the
+         *                    one with the lower priority value will be pushed
+         *                    first.
+         * @param name        name of the stream. This is only for debug
+         *                    purposes
+         * @result            stream index, which is used to identify the
+         *                    stream (e.g. for push).
          * */
         template <class T> int registerDataStream(base::Time dataPeriod, boost::function<void (const base::Time &ts, const T &value)> callback, int priority = -1, const std::string &name = std::string())
         {
@@ -260,6 +298,27 @@ namespace transformer
          * This function registes a new data stream together with an callback. 
          * 
          * The callback will be called every time a new data sample is available.
+         *
+         * @sa aggregator::StreamAligner::registerStream
+         *
+         * @param dataPeriod      time between sensor readings. This will be
+         *                        used to estimate when the next reading should
+         *                        arrive, so out of order arrivals are
+         *                        possible. Set to 0 if not a periodic stream.
+         *                        When set to a negative value, the calculation
+         *                        of the buffer is performed for that period,
+         *                        however no lookahead is set.
+         * @param transformation  The transformation associated with the
+         *                        callback.
+         * @param callback        will be called for data gone through the
+         *                        synchronization process
+         * @param priority        if streams have data with equal timestamps,
+         *                        the one with the lower priority value will be
+         *                        pushed first.
+         * @param name            name of the stream. This is only for debug
+         *                        purposes
+         * @result                stream index, which is used to identify the
+         *                        stream (e.g. for push).
          * */
         template <class T> int registerDataStreamWithTransform(base::Time dataPeriod, Transformation &transformation, boost::function<void (const base::Time &ts, const T &value, const Transformation &t)> callback, int priority = - 1, const std::string &name = std::string())
         {
@@ -267,7 +326,10 @@ namespace transformer
         };
 
         /**
-         * This function unregistes a data stream. 
+         * This function will remove the stream with the given index from the
+         * stream aligner.
+         *
+         * @param idx index of the stream that should be unregistered
          * */
         void unregisterDataStream(int idx)
         {
@@ -275,7 +337,18 @@ namespace transformer
         };
 
         /** 
-         * @copydoc aggregator::StreamAligner::disableStream
+         * Will disable the stream with the given index.
+         *
+         * All data left in the stream will still be played out, however the
+         * stream will be ignored for lookahead and timeout calculation. A
+         * stream, which is disabled can be enabled through the enableStream()
+         * call, or if new data in this stream arrives.
+         *
+         * The functionality is needed for cases where streams might be
+         * optional, so that the other streams won't be delayed up to the
+         * maximum time out value.
+         *
+         * @param idx index of the stream that should be disabled
          */
         void disableStream( int idx )
         {
@@ -283,7 +356,12 @@ namespace transformer
         }
 
         /** 
-         * @copydoc aggregator::StreamAligner::enableStream
+         * Enables a stream which has been disabled previously.
+         *
+         * All streams are enabled by default. Does not have any effect on
+         * streams which are already enabled.
+         *
+         * @param idx index of the stream that should be enabled
          */
         void enableStream( int idx )
         {
@@ -291,43 +369,71 @@ namespace transformer
         }
 
         /** 
-         * @copydoc aggregator::StreamAligner::isStreamActive
+         * See if a stream is enabled or disabled.
+         *
+         * @param idx index of the stream to look at
+         * @return true if the stream is enabled (active)
          */
         bool isStreamActive( int idx ) const 
         {
             return aggregator.isStreamActive( idx );
         }
         
+        /**
+         * @deprecated
+         *
+         * This never worked, except for boolean typed streams.
+         */
         void requestTransformationAtTime(int idx, base::Time ts)
         {
             aggregator.push(idx, ts, false);
         };
         
         /** Push new data into the stream
-         * @param ts - the timestamp of the data item
-         * @param data - the data added to the stream
+         *
+         * @param idx   The stream index, as obtained from
+         *              registerDataStream or registerDataStreamWithTransform
+         * @param ts    the timestamp of the data item
+         * @param data  the data added to the stream
          */
         template <class T> void pushData( int idx,const base::Time &ts, const T& data )
         {
             aggregator.push(idx, ts, data);
         };
         
-        /**
-         * Process data streams, this basically calls StreamAligner::step().
+        /** This will go through the available streams and look for the
+         * oldest available data. The data can be either existing are predicted
+         * through the period.
+         *
+         * There are three different cases that can happen:
+         *  - The data is already available. In this case that data is forwarded
+         *    to the callback.
+         *  - The data is not yet available, and the time difference between oldest
+         *    data and newest data is below the timeout threshold. In this case
+         *    no data is called.
+         *  - The data is not yet available, and the timeout is reached. In this
+         *    case, the oldest data (which is obviously non-available) is ignored,
+         *    and only newer data is considered.
+         *
+         *  @result - true if a callback was called and more data might be available
          * */
         int step()
         {
             return aggregator.step();
         }
         
-        /**
-         * Get debug output of underlying stream aligner
-         * */
+        /** @return the current status of the StreamAligner
+         * this is mainly used for debug purposes
+         */
         const aggregator::StreamAlignerStatus &getStreamAlignerStatus()
         {
             return aggregator.getStatus();
         }
         
+        /** Set the time the Estimator will wait for an expected reading on any of the streams.
+         * This number effectively puts an upper limit to the lag that can be created due to
+         * delay or missing values on the channels.
+         */
         void setTimeout(const base::Time &t )
         {
             aggregator.setTimeout(t);
@@ -339,20 +445,29 @@ namespace transformer
          * This function will interally keep track of available 
          * transformations and register streams for 'new'
          * transformations.  
+         *
+         * @param tr  The dynamic transformation to integrate
          * */
         virtual void pushDynamicTransformation(const TransformationType &tr);
         
         /**
          * Function for adding static Transformations.
+         *
+         * @param tr  The state transformation to integrate
          * */
         void pushStaticTransformation(const TransformationType &tr);
 
         
+        /**
+         * Renames a frame
+         *
+         * @param frameName  The old name of the frame
+         * @param newName    The new name of the frame
+         * */
         void setFrameMapping(const std::string &frameName, const std::string &newName);
 
-        /** 
-         * @return the status of the StreamAligner, which contains current latency
-         * and buffer fill sizes of the individual streams.
+        /** @return the current status of the StreamAligner
+         * this is mainly used for debug purposes
          */
         const aggregator::StreamAlignerStatus& getStatus()
         {
