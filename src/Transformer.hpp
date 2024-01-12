@@ -382,8 +382,23 @@ namespace transformer
         /**
          * @deprecated
          *
-         * This never worked, except for boolean typed streams.
+         * This was required to use a previous version of
+         * registerTransformCallback(registerTransfromCallback)
+         * that created a bool typed stream.
+         *
+         * The current implementation of registerTransformCallback
+         * no longer requires a call to requestTransformationAtTime.
+         *
+         * This only works with indexes of bool typed streams.
+         *
+         * See commit 299857530298fd43912d341cdd273dc20c83fd9a,
+         * a35ede8dd0f84dfefb36627033c1df5c72b56ff1
          */
+#if defined(__cplusplus) && (__cplusplus >= 201402L)
+        [[deprecated("No longer needed with registerTransformCallback")]]
+#elif defined(__GNUC__) || defined(__clang__)
+        __attribute__((deprecated("No longer needed with registerTransformCallback")))
+#endif
         void requestTransformationAtTime(int idx, base::Time ts)
         {
             aggregator.push(idx, ts, false);
